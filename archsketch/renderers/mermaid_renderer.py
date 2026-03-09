@@ -30,9 +30,10 @@ def render_mermaid(architecture: Architecture) -> str:
         
         # Create the label
         label = node.display_label()
-        
-        # Add node definition
-        lines.append(f"  {safe_id}[{label}]")
+        label_escaped = label.replace('"', "'")
+        if node.sources:
+            lines.append(f"  %% {node.explanation()}")
+        lines.append(f'  {safe_id}["{label_escaped}"]')
     
     # Add empty line before edges
     if architecture.edges:

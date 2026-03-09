@@ -114,18 +114,49 @@ archsketch analyze /path/to/project --json
 archsketch show /path/to/project
 ```
 
+### Compare architecture between git refs (diff)
+
+Requires: `pip install gitpython`
+
+```bash
+archsketch diff main feature-branch
+archsketch diff HEAD~1 HEAD ./src
+```
+
+Shows added/removed components and edges (e.g. `+ Cache: Redis`, `- Database: MySQL`).
+
+### Explain in the diagram
+
+- **ASCII**: Each node box shows a short "From: ..." source line when available.
+- **Mermaid**: Comments in the `.mmd` file document which file each node came from.
+- **JSON**: Each node has `sources` and `explanation` for CI/scripting.
+
+### Stable JSON for CI
+
+Export includes `$schema`, `version`, and consistent shape. Schema: `schema/architecture.json`.
+
+```bash
+archsketch analyze . --output architecture.json
+```
+
 ## What It Detects
 
 ArchSketch reads these files to understand your stack:
 
 | File | What it detects |
 |------|----------------|
-| `package.json` | React, Next.js, Vue, Express, NestJS, Prisma, Redis clients |
-| `requirements.txt` | FastAPI, Flask, Django, Celery, psycopg2, redis-py |
+| `package.json` | React, Next.js, Vue, Express, NestJS, Prisma, Redis, Remix, Astro, Hono, Supabase |
+| `requirements.txt` | FastAPI, Flask, Django, Celery, psycopg2, redis, Supabase |
 | `pyproject.toml` | Same as requirements.txt |
+| `pom.xml` | Spring Boot, PostgreSQL, Redis, Kafka, Micronaut, Quarkus |
+| `build.gradle` / `build.gradle.kts` | Spring Boot, PostgreSQL, Redis (Gradle) |
 | `docker-compose.yml` | PostgreSQL, MySQL, Redis, Nginx, RabbitMQ, custom services |
 | `Dockerfile` | Base images (node, python, nginx) |
 | `.env` | Database URLs, Redis URLs, service connections |
+| `nginx.conf` | Nginx, upstream backends, SSL, WebSocket |
+| `Procfile` | web/worker process types, Gunicorn, Celery, Next.js |
+| `deployment.yaml`, `service.yaml`, `k8s/*.yaml` | Kubernetes Deployments, Services, Ingress, container images |
+| `*.tf` | Terraform (AWS RDS, Lambda, SQS, GCP, Azure resources) |
 
 ## Detected Technologies
 
@@ -195,7 +226,9 @@ archsketch/
 │   └── renderers/
 │       ├── ascii_renderer.py
 │       └── mermaid_renderer.py
-├── tests/                   # 40 tests
+├── schema/
+│   └── architecture.json   # JSON schema for export (CI/scripting)
+├── tests/                  # 60+ tests
 ├── samples/                 # Example projects
 └── pyproject.toml
 ```

@@ -49,6 +49,7 @@ class ArchitectureNode:
     label: str
     role: ArchitectureRole
     technologies: list[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)  # file paths that contributed (for explain/tooltips)
     
     def __str__(self) -> str:
         tech_str = ", ".join(self.technologies) if self.technologies else "Unknown"
@@ -59,6 +60,15 @@ class ArchitectureNode:
         if self.technologies:
             return f"{self.role.value}: {self.technologies[0]}"
         return self.role.value
+    
+    def explanation(self) -> str:
+        """Short explanation for tooltips/annotations."""
+        if self.sources:
+            short = self.sources[0]
+            if len(short) > 40:
+                short = "..." + short[-37:]
+            return f"From: {short}"
+        return f"Inferred as {self.role.value}"
 
 
 @dataclass

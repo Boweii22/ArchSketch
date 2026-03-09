@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://archsketch.dev/schema/architecture.json",
+  "title": "ArchSketch Architecture",
+  "description": "Stable JSON export format for CI and scripting",
+  "type": "object",
+  "required": ["version", "nodes", "edges", "detections"],
+  "properties": {
+    "$schema": { "type": "string", "description": "Optional pointer to this schema" },
+    "version": { "type": "string", "const": "1.0" },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "role", "technologies"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "role": { "type": "string", "enum": ["Frontend", "Backend", "Database", "Cache", "Reverse Proxy", "Worker", "Queue"] },
+          "technologies": { "type": "array", "items": { "type": "string" } },
+          "sources": { "type": "array", "items": { "type": "string" } },
+          "explanation": { "type": "string" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "target", "relation"],
+        "properties": {
+          "source": { "type": "string" },
+          "target": { "type": "string" },
+          "relation": { "type": "string" }
+        }
+      }
+    },
+    "detections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tech", "category", "confidence", "source_file"],
+        "properties": {
+          "tech": { "type": "string" },
+          "category": { "type": "string" },
+          "confidence": { "type": "number" },
+          "source_file": { "type": "string" },
+          "details": { "type": "string" }
+        }
+      }
+    }
+  }
+}

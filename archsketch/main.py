@@ -11,16 +11,20 @@ from .detectors import (
     detect_from_docker_compose,
     detect_from_dockerfile,
     detect_from_env_files,
+    detect_from_gradle,
+    detect_from_kubernetes,
     detect_from_nginx_conf,
     detect_from_package_json,
     detect_from_pom_xml,
+    detect_from_procfile,
     detect_from_requirements,
+    detect_from_terraform,
 )
 from .inference import InferenceEngine
 from .models import TechnologyDetection
 from .renderers import render_ascii, render_mermaid
 from .renderers.mermaid_renderer import export_mermaid
-from .scanner import scan_directory
+from .scanner import scan_directory, KEY_KUBERNETES, KEY_TERRAFORM
 
 app = typer.Typer(
     name="archsketch",
@@ -52,20 +56,23 @@ def main(
     pass
 
 
-def run_detection(path: Path) -> tuple[list[TechnologyDetection], "Architecture"]:
+def run_detection(path: Path, silent: bool = False) -> tuple[list[TechnologyDetection], "Architecture"]:
     """Run detection and inference on a path."""
     from .models import Architecture
     
     # Scan the directory
-    console.print(f"[dim]Scanning {path}...[/dim]")
+    if not silent:
+        console.print(f"[dim]Scanning {path}...[/dim]")
     scan_result = scan_directory(path)
     
     # Show what files were found
     file_summary = scan_result.summary()
     if file_summary:
-        console.print(f"[dim]Found: {', '.join(f'{k}({v})' for k, v in file_summary.items())}[/dim]")
+        if not silent:
+            console.print(f"[dim]Found: {', '.join(f'{k}({v})' for k, v in file_summary.items())}[/dim]")
     else:
-        console.print("[yellow]No architecture-related files found.[/yellow]")
+        if not silent:
+            console.print("[yellow]No architecture-related files found.[/yellow]")
         return [], Architecture()
     
     # Run detectors
@@ -105,6 +112,22 @@ def run_detection(path: Path) -> tuple[list[TechnologyDetection], "Architecture"
     for pom_file in scan_result.get_files("pom.xml"):
         detections.extend(detect_from_pom_xml(pom_file))
     
+    # Gradle detection
+    for gradle_file in scan_result.get_files("build.gradle") + scan_result.get_files("build.gradle.kts"):
+        detections.extend(detect_from_gradle(gradle_file))
+    
+    # Procfile detection (Heroku-style)
+    for procfile in scan_result.get_files("Procfile"):
+        detections.extend(detect_from_procfile(procfile))
+    
+    # Kubernetes manifests
+    for k8s_file in scan_result.get_files(KEY_KUBERNETES):
+        detections.extend(detect_from_kubernetes(k8s_file))
+    
+    # Terraform
+    for tf_file in scan_result.get_files(KEY_TERRAFORM):
+        detections.extend(detect_from_terraform(tf_file))
+    
     # Run inference
     engine = InferenceEngine()
     architecture = engine.infer(detections)
@@ -113,14 +136,18 @@ def run_detection(path: Path) -> tuple[list[TechnologyDetection], "Architecture"
 
 
 def _build_json_output(detections: list, architecture) -> dict:
-    """Build JSON output dictionary."""
+    """Build JSON output dictionary (stable schema for CI/scripting)."""
     return {
+        "$schema": "schema/architecture.json",
+        "version": "1.0",
         "nodes": [
             {
                 "id": n.id,
                 "label": n.label,
                 "role": n.role.value,
                 "technologies": n.technologies,
+                "sources": n.sources,
+                "explanation": n.explanation(),
             }
             for n in architecture.nodes
         ],
@@ -441,6 +468,135 @@ def _get_inference_rule(role: str, tech: str) -> str:
         "Queue": f"{tech} is a message broker -> Queue role",
     }
     return rules.get(role, "Pattern matched -> Role assigned")
+
+
+def _architecture_fingerprint(architecture) -> tuple[set[str], set[tuple[str, str]]]:
+    """Return (set of node labels, set of (source,target) edges) for comparison."""
+    nodes = set()
+    for n in architecture.nodes:
+        label = f"{n.role.value}:{n.technologies[0] if n.technologies else '?'}"
+        nodes.add(label)
+    edges = set()
+    for e in architecture.edges:
+        edges.add((e.source, e.target))
+    return nodes, edges
+
+
+@app.command()
+def diff(
+    ref_a: str = typer.Argument(..., help="Base ref (e.g. main, HEAD~1)."),
+    ref_b: str = typer.Argument(..., help="Compare ref (e.g. feature-branch)."),
+    path: Path = typer.Argument(
+        Path("."),
+        help="Path inside the git repo (default: current directory).",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+    ),
+) -> None:
+    """Compare architecture between two git refs (branches or commits)."""
+    import shutil
+    import tempfile
+    from pathlib import Path as P
+    
+    try:
+        import git
+    except ImportError:
+        console.print(
+            "[red]GitPython is required for diff. Install with: pip install gitpython[/red]"
+        )
+        raise typer.Exit(1)
+    
+    try:
+        repo = git.Repo(path, search_parent_directories=True)
+    except Exception as e:
+        console.print(f"[red]Not a git repository or invalid path: {e}[/red]")
+        raise typer.Exit(1)
+    
+    root = P(repo.working_dir)
+    
+    def extract_ref(ref: str) -> P:
+        try:
+            tree = repo.tree(ref)
+        except Exception as e:
+            raise RuntimeError(f"Invalid ref '{ref}': {e}") from e
+        tmp = P(tempfile.mkdtemp(prefix="archsketch_"))
+        try:
+            for item in tree.traverse():
+                if item.type == "blob":
+                    out_path = tmp / item.path
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    out_path.write_bytes(item.data_stream.read().read())
+        except Exception:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise
+        return tmp
+    
+    tmp_a = tmp_b = None
+    try:
+        console.print(f"[dim]Extracting {ref_a}...[/dim]")
+        tmp_a = extract_ref(ref_a)
+        console.print(f"[dim]Extracting {ref_b}...[/dim]")
+        tmp_b = extract_ref(ref_b)
+        
+        _, arch_a = run_detection(tmp_a, silent=True)
+        _, arch_b = run_detection(tmp_b, silent=True)
+        
+        nodes_a, edges_a = _architecture_fingerprint(arch_a)
+        nodes_b, edges_b = _architecture_fingerprint(arch_b)
+        
+        added_nodes = nodes_b - nodes_a
+        removed_nodes = nodes_a - nodes_b
+        added_edges = edges_b - edges_a
+        removed_edges = edges_a - edges_b
+        
+        # Print diff
+        from rich.panel import Panel
+        from rich.table import Table
+        
+        console.print()
+        console.print(Panel(
+            f"[bold]Architecture diff: {ref_a} vs {ref_b}[/bold]",
+            border_style="blue",
+        ))
+        console.print()
+        
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Change", style="bold")
+        table.add_column("Detail")
+        
+        if added_nodes:
+            for n in sorted(added_nodes):
+                table.add_row("[green]+ Component[/green]", n)
+        if removed_nodes:
+            for n in sorted(removed_nodes):
+                table.add_row("[red]- Component[/red]", n)
+        if added_edges:
+            for (s, t) in sorted(added_edges):
+                table.add_row("[green]+ Edge[/green]", f"{s} -> {t}")
+        if removed_edges:
+            for (s, t) in sorted(removed_edges):
+                table.add_row("[red]- Edge[/red]", f"{s} -> {t}")
+        
+        if not (added_nodes or removed_nodes or added_edges or removed_edges):
+            console.print("[dim]No architecture changes between refs.[/dim]")
+        else:
+            console.print(table)
+        console.print()
+        
+    finally:
+        if tmp_a and P(tmp_a).exists():
+            shutil.rmtree(tmp_a, ignore_errors=True)
+        if tmp_b and P(tmp_b).exists():
+            shutil.rmtree(tmp_b, ignore_errors=True)
+    
+    except RuntimeError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

@@ -51,7 +51,8 @@ class InferenceEngine:
         """Create architecture nodes from categorized detections."""
         
         # Frontend node
-        frontend_techs = self._get_primary_techs(by_category.get(TechCategory.FRONTEND, []))
+        frontend_dets = by_category.get(TechCategory.FRONTEND, [])
+        frontend_techs = self._get_primary_techs(frontend_dets)
         if frontend_techs:
             self.architecture.nodes.append(
                 ArchitectureNode(
@@ -59,11 +60,13 @@ class InferenceEngine:
                     label=f"Frontend: {frontend_techs[0]}",
                     role=ArchitectureRole.FRONTEND,
                     technologies=frontend_techs,
+                    sources=self._get_sources(frontend_dets),
                 )
             )
         
         # Backend node
-        backend_techs = self._get_primary_techs(by_category.get(TechCategory.BACKEND, []))
+        backend_dets = by_category.get(TechCategory.BACKEND, [])
+        backend_techs = self._get_primary_techs(backend_dets)
         if backend_techs:
             self.architecture.nodes.append(
                 ArchitectureNode(
@@ -71,11 +74,13 @@ class InferenceEngine:
                     label=f"Backend: {backend_techs[0]}",
                     role=ArchitectureRole.BACKEND,
                     technologies=backend_techs,
+                    sources=self._get_sources(backend_dets),
                 )
             )
         
         # Database node
-        db_techs = self._get_primary_techs(by_category.get(TechCategory.DATABASE, []))
+        db_dets = by_category.get(TechCategory.DATABASE, [])
+        db_techs = self._get_primary_techs(db_dets)
         if db_techs:
             # Filter out ORMs for the primary label, prefer actual DBs
             primary_dbs = [t for t in db_techs if t not in ("SQLAlchemy", "Prisma", "TypeORM", "Sequelize", "SQLModel", "Tortoise ORM", "Peewee")]
@@ -86,11 +91,13 @@ class InferenceEngine:
                     label=f"Database: {label_tech}",
                     role=ArchitectureRole.DATABASE,
                     technologies=db_techs,
+                    sources=self._get_sources(db_dets),
                 )
             )
         
         # Cache node
-        cache_techs = self._get_primary_techs(by_category.get(TechCategory.CACHE, []))
+        cache_dets = by_category.get(TechCategory.CACHE, [])
+        cache_techs = self._get_primary_techs(cache_dets)
         if cache_techs:
             self.architecture.nodes.append(
                 ArchitectureNode(
@@ -98,11 +105,13 @@ class InferenceEngine:
                     label=f"Cache: {cache_techs[0]}",
                     role=ArchitectureRole.CACHE,
                     technologies=cache_techs,
+                    sources=self._get_sources(cache_dets),
                 )
             )
         
         # Reverse proxy node
-        proxy_techs = self._get_primary_techs(by_category.get(TechCategory.REVERSE_PROXY, []))
+        proxy_dets = by_category.get(TechCategory.REVERSE_PROXY, [])
+        proxy_techs = self._get_primary_techs(proxy_dets)
         if proxy_techs:
             self.architecture.nodes.append(
                 ArchitectureNode(
@@ -110,11 +119,13 @@ class InferenceEngine:
                     label=f"Reverse Proxy: {proxy_techs[0]}",
                     role=ArchitectureRole.REVERSE_PROXY,
                     technologies=proxy_techs,
+                    sources=self._get_sources(proxy_dets),
                 )
             )
         
         # Worker node
-        worker_techs = self._get_primary_techs(by_category.get(TechCategory.WORKER, []))
+        worker_dets = by_category.get(TechCategory.WORKER, [])
+        worker_techs = self._get_primary_techs(worker_dets)
         if worker_techs:
             self.architecture.nodes.append(
                 ArchitectureNode(
@@ -122,11 +133,13 @@ class InferenceEngine:
                     label=f"Worker: {worker_techs[0]}",
                     role=ArchitectureRole.WORKER,
                     technologies=worker_techs,
+                    sources=self._get_sources(worker_dets),
                 )
             )
         
         # Queue node
-        queue_techs = self._get_primary_techs(by_category.get(TechCategory.QUEUE, []))
+        queue_dets = by_category.get(TechCategory.QUEUE, [])
+        queue_techs = self._get_primary_techs(queue_dets)
         if queue_techs:
             self.architecture.nodes.append(
                 ArchitectureNode(
@@ -134,6 +147,7 @@ class InferenceEngine:
                     label=f"Queue: {queue_techs[0]}",
                     role=ArchitectureRole.QUEUE,
                     technologies=queue_techs,
+                    sources=self._get_sources(queue_dets),
                 )
             )
     
@@ -260,3 +274,13 @@ class InferenceEngine:
                 techs.append(det.tech)
         
         return techs
+    
+    def _get_sources(self, detections: list[TechnologyDetection]) -> list[str]:
+        """Get unique source file paths from detections (order preserved)."""
+        seen: set[str] = set()
+        out: list[str] = []
+        for d in detections:
+            if d.source_file not in seen:
+                seen.add(d.source_file)
+                out.append(d.source_file)
+        return out

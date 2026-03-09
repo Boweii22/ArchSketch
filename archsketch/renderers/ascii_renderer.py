@@ -73,8 +73,8 @@ def render_ascii(
     return ""
 
 
-def _create_node_box(node: ArchitectureNode, width: int = 28) -> Panel:
-    """Create a styled box for a node."""
+def _create_node_box(node: ArchitectureNode, width: int = 28, show_explanation: bool = True) -> Panel:
+    """Create a styled box for a node, optionally with explanation line."""
     color = ROLE_COLORS.get(node.role, "white")
     icon = ROLE_ICONS.get(node.role, "**")
     
@@ -85,6 +85,9 @@ def _create_node_box(node: ArchitectureNode, width: int = 28) -> Panel:
     content.append(f"{icon} ", style=f"bold {color}")
     content.append(f"{node.role.value}\n", style=f"bold {color}")
     content.append(tech_name, style=f"{color}")
+    if show_explanation and node.sources:
+        content.append("\n")
+        content.append(node.explanation(), style="dim")
     
     return Panel(
         Align.center(content),

@@ -39,6 +39,9 @@ dev = [
 graphviz = [
     "graphviz>=0.20.0",
 ]
+diff = [
+    "gitpython>=3.1.0",
+]
 
 [project.scripts]
 archsketch = "archsketch.main:app"

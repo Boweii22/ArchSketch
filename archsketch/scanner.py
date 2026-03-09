@@ -27,6 +27,18 @@ IMPORTANT_FILES = {
     "Makefile",
 }
 
+# Kubernetes manifest names (collected under KEY_KUBERNETES)
+K8S_MANIFEST_NAMES = frozenset({
+    "deployment.yaml", "deployment.yml", "service.yaml", "service.yml",
+    "ingress.yaml", "ingress.yml", "kustomization.yaml", "kustomization.yml",
+    "daemonset.yaml", "statefulset.yaml", "cronjob.yaml", "job.yaml",
+    "configmap.yaml", "secret.yaml",
+})
+
+# Synthetic keys for multi-file types (populated in scan_directory)
+KEY_TERRAFORM = "terraform"
+KEY_KUBERNETES = "kubernetes"
+
 # Directories to skip during scanning
 SKIP_DIRS = {
     "node_modules",
@@ -138,5 +150,27 @@ def scan_directory(path: str | Path) -> ScanResult:
                 if ".env" not in result.files:
                     result.files[".env"] = []
                 result.files[".env"].append(full_path)
+            
+            # Terraform .tf files
+            elif filename.endswith(".tf"):
+                full_path = Path(dirpath) / filename
+                if KEY_TERRAFORM not in result.files:
+                    result.files[KEY_TERRAFORM] = []
+                result.files[KEY_TERRAFORM].append(full_path)
+            
+            # Kubernetes manifests (named like deployment.yaml or under k8s/ kubernetes/ deploy/)
+            elif filename.endswith((".yaml", ".yml")):
+                path_lower = dirpath.lower()
+                if (
+                    filename in K8S_MANIFEST_NAMES
+                    or "k8s" in path_lower
+                    or "kubernetes" in path_lower
+                    or path_lower.endswith("deploy")
+                    or filename.startswith(("deployment", "service", "ingress", "daemonset", "statefulset", "cronjob", "job", "configmap"))
+                ):
+                    full_path = Path(dirpath) / filename
+                    if KEY_KUBERNETES not in result.files:
+                        result.files[KEY_KUBERNETES] = []
+                    result.files[KEY_KUBERNETES].append(full_path)
     
     return result
