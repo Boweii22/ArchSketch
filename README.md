@@ -246,6 +246,21 @@ archsketch/
 - No external services needed
 - Works offline
 
+## Troubleshooting
+
+**`archsketch` command not found after `pip install archsketch`**
+
+On Windows, if Python's Scripts folder isn't on your PATH (common with user installs or Windows Store Python), use:
+
+```bash
+python -m archsketch analyze .
+```
+
+This runs archsketch as a Python module and works without adding anything to PATH.
+
+Alternatively, add your Python Scripts folder to PATH, e.g.:
+`C:\Users\<You>\AppData\Roaming\Python\Python3XX\Scripts` (replace `XX` with your Python version).
+
 ## License
 
 MIT
