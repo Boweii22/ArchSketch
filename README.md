@@ -61,25 +61,11 @@ archsketch analyze /path/to/your/project
 ```
 
 ## Screenshots
-<img width="1886" height="903" alt="image" src="https://github.com/user-attachments/assets/d3c7909b-f350-4a37-8786-cace590750ee" />
-<img width="1917" height="1074" alt="image" src="https://github.com/user-attachments/assets/41fe360f-4b33-4e15-a96f-e86b3ce597bf" />
-
-
-Add **2 screenshots** so users see real output. Create a `docs/` folder and save the images there, then they will show below.
-
-| # | What to capture | Save as |
-|---|------------------|--------|
-| 1 | Terminal: run `archsketch analyze samples/fullstack-app` and capture the full output (diagram + legend + table) | `docs/screenshot-analyze.png` |
-| 2 | Browser: run `archsketch export samples/fullstack-app --format graphviz -o arch.svg`, open `arch.svg`, capture the diagram | `docs/screenshot-export-svg.png` |
-
 ### Terminal output (analyze)
-
-![ArchSketch analyze output](docs/screenshot-analyze.png)
+<img width="1886" height="903" alt="image" src="https://github.com/user-attachments/assets/d3c7909b-f350-4a37-8786-cace590750ee" />
 
 ### Exported SVG
-
-![ArchSketch export SVG](docs/screenshot-export-svg.png)
->>>>>>> 4800489 (feat(analyze): add --show-sources option for From/source lines in ASCII diagram)
+<img width="1917" height="1074" alt="image" src="https://github.com/user-attachments/assets/41fe360f-4b33-4e15-a96f-e86b3ce597bf" />
 
 ## Usage
 
