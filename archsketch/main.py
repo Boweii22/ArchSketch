@@ -205,6 +205,11 @@ def analyze(
         "--no-table",
         help="Same as --compact: diagram only.",
     ),
+    show_sources: bool = typer.Option(
+        False,
+        "--show-sources",
+        help="Show 'From: ...' source file in each diagram box.",
+    ),
 ) -> None:
     """Analyze a project and display its architecture."""
     
@@ -224,7 +229,7 @@ def analyze(
             else:
                 console.print_json(json.dumps(output))
         else:
-            render_ascii(architecture, console, show_table=show_table)
+            render_ascii(architecture, console, show_table=show_table, show_sources=show_sources)
             
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -584,12 +589,6 @@ def diff(
         else:
             console.print(table)
         console.print()
-        
-    finally:
-        if tmp_a and P(tmp_a).exists():
-            shutil.rmtree(tmp_a, ignore_errors=True)
-        if tmp_b and P(tmp_b).exists():
-            shutil.rmtree(tmp_b, ignore_errors=True)
     
     except RuntimeError as e:
         console.print(f"[red]{e}[/red]")
@@ -597,6 +596,11 @@ def diff(
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
+    finally:
+        if tmp_a and P(tmp_a).exists():
+            shutil.rmtree(tmp_a, ignore_errors=True)
+        if tmp_b and P(tmp_b).exists():
+            shutil.rmtree(tmp_b, ignore_errors=True)
 
 
 if __name__ == "__main__":

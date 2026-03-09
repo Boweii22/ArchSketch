@@ -39,6 +39,7 @@ def render_ascii(
     console: Console | None = None,
     *,
     show_table: bool = True,
+    show_sources: bool = False,
 ) -> str:
     """
     Render architecture as a beautiful ASCII diagram in the terminal.
@@ -47,6 +48,7 @@ def render_ascii(
         architecture: The architecture to render
         console: Rich console for output (optional)
         show_table: If False, skip the detected technologies table (compact mode).
+        show_sources: If True, show "From: ..." source line in each diagram box.
         
     Returns:
         String representation of the architecture
@@ -61,7 +63,7 @@ def render_ascii(
     console.print()
     
     # Print the main architecture diagram
-    _print_vertical_diagram(architecture, console)
+    _print_vertical_diagram(architecture, console, show_sources=show_sources)
     
     # Print the legend
     _print_legend(architecture, console)
@@ -73,8 +75,8 @@ def render_ascii(
     return ""
 
 
-def _create_node_box(node: ArchitectureNode, width: int = 28, show_explanation: bool = True) -> Panel:
-    """Create a styled box for a node, optionally with explanation line."""
+def _create_node_box(node: ArchitectureNode, width: int = 28, show_explanation: bool = False) -> Panel:
+    """Create a styled box for a node. Set show_explanation=True to show 'From: ...' source line."""
     color = ROLE_COLORS.get(node.role, "white")
     icon = ROLE_ICONS.get(node.role, "**")
     
@@ -157,14 +159,16 @@ def _print_backend_with_branches(
     side_nodes: list[ArchitectureNode],
     console: Console,
     box_width: int,
+    *,
+    show_sources: bool = False,
 ) -> None:
     """Print backend node with side branches to cache/worker/queue."""
     
     # Create the backend box
-    backend_box = _create_node_box(backend_node, box_width)
+    backend_box = _create_node_box(backend_node, box_width, show_explanation=show_sources)
     
     # Create side boxes
-    side_boxes = [_create_node_box(n, box_width - 4) for n in side_nodes]
+    side_boxes = [_create_node_box(n, box_width - 4, show_explanation=show_sources) for n in side_nodes]
     
     # Print backend centered
     console.print(Align.center(backend_box))
