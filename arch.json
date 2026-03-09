@@ -1,0 +1,266 @@
+{
+  "nodes": [
+    {
+      "id": "frontend",
+      "label": "Frontend: Next.js",
+      "role": "Frontend",
+      "technologies": [
+        "Next.js",
+        "React",
+        "frontend",
+        "Static Frontend",
+        "frontend (custom)"
+      ]
+    },
+    {
+      "id": "backend",
+      "label": "Backend: FastAPI",
+      "role": "Backend",
+      "technologies": [
+        "FastAPI",
+        "WebSocket",
+        "backend (upstream)",
+        "backend",
+        "backend (custom)"
+      ]
+    },
+    {
+      "id": "database",
+      "label": "Database: PostgreSQL",
+      "role": "Database",
+      "technologies": [
+        "PostgreSQL",
+        "SQLAlchemy",
+        "db"
+      ]
+    },
+    {
+      "id": "cache",
+      "label": "Cache: Redis",
+      "role": "Cache",
+      "technologies": [
+        "Redis",
+        "cache"
+      ]
+    },
+    {
+      "id": "reverse_proxy",
+      "label": "Reverse Proxy: Nginx",
+      "role": "Reverse Proxy",
+      "technologies": [
+        "Nginx",
+        "nginx"
+      ]
+    },
+    {
+      "id": "worker",
+      "label": "Worker: Celery",
+      "role": "Worker",
+      "technologies": [
+        "Celery",
+        "worker",
+        "worker (custom)"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "reverse_proxy",
+      "target": "frontend",
+      "relation": "routes"
+    },
+    {
+      "source": "reverse_proxy",
+      "target": "backend",
+      "relation": "routes"
+    },
+    {
+      "source": "frontend",
+      "target": "backend",
+      "relation": "calls"
+    },
+    {
+      "source": "backend",
+      "target": "database",
+      "relation": "queries"
+    },
+    {
+      "source": "backend",
+      "target": "cache",
+      "relation": "caches"
+    },
+    {
+      "source": "worker",
+      "target": "database",
+      "relation": "queries"
+    },
+    {
+      "source": "worker",
+      "target": "cache",
+      "relation": "uses"
+    }
+  ],
+  "detections": [
+    {
+      "tech": "Next.js",
+      "category": "frontend",
+      "confidence": 0.9,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\package.json",
+      "details": "Found 'next' in dependencies"
+    },
+    {
+      "tech": "React",
+      "category": "frontend",
+      "confidence": 0.9,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\package.json",
+      "details": "Found 'react-dom' in dependencies"
+    },
+    {
+      "tech": "Redis",
+      "category": "cache",
+      "confidence": 0.9,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\requirements.txt",
+      "details": "Found 'redis' in requirements.txt"
+    },
+    {
+      "tech": "PostgreSQL",
+      "category": "database",
+      "confidence": 0.9,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\requirements.txt",
+      "details": "Found 'psycopg2-binary' in requirements.txt"
+    },
+    {
+      "tech": "Celery",
+      "category": "worker",
+      "confidence": 0.9,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\requirements.txt",
+      "details": "Found 'celery' in requirements.txt"
+    },
+    {
+      "tech": "SQLAlchemy",
+      "category": "database",
+      "confidence": 0.9,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\requirements.txt",
+      "details": "Found 'sqlalchemy' in requirements.txt"
+    },
+    {
+      "tech": "FastAPI",
+      "category": "backend",
+      "confidence": 0.9,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\requirements.txt",
+      "details": "Found 'fastapi' in requirements.txt"
+    },
+    {
+      "tech": "Nginx",
+      "category": "reverse_proxy",
+      "confidence": 0.95,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Docker service 'nginx' uses image 'nginx:latest'"
+    },
+    {
+      "tech": "nginx",
+      "category": "reverse_proxy",
+      "confidence": 0.6,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Service name 'nginx' suggests reverse_proxy"
+    },
+    {
+      "tech": "frontend",
+      "category": "frontend",
+      "confidence": 0.6,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Service name 'frontend' suggests frontend"
+    },
+    {
+      "tech": "frontend (custom)",
+      "category": "frontend",
+      "confidence": 0.5,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Docker service 'frontend' has build context"
+    },
+    {
+      "tech": "backend",
+      "category": "backend",
+      "confidence": 0.6,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Service name 'backend' suggests backend"
+    },
+    {
+      "tech": "backend (custom)",
+      "category": "backend",
+      "confidence": 0.5,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Docker service 'backend' has build context"
+    },
+    {
+      "tech": "worker",
+      "category": "worker",
+      "confidence": 0.6,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Service name 'worker' suggests worker"
+    },
+    {
+      "tech": "worker (custom)",
+      "category": "worker",
+      "confidence": 0.5,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Docker service 'worker' has build context"
+    },
+    {
+      "tech": "PostgreSQL",
+      "category": "database",
+      "confidence": 0.95,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Docker service 'db' uses image 'postgres:15-alpine'"
+    },
+    {
+      "tech": "db",
+      "category": "database",
+      "confidence": 0.6,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Service name 'db' suggests database"
+    },
+    {
+      "tech": "Redis",
+      "category": "cache",
+      "confidence": 0.95,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Docker service 'cache' uses image 'redis:7-alpine'"
+    },
+    {
+      "tech": "cache",
+      "category": "cache",
+      "confidence": 0.6,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\docker-compose.yml",
+      "details": "Service name 'cache' suggests cache"
+    },
+    {
+      "tech": "Nginx",
+      "category": "reverse_proxy",
+      "confidence": 1.0,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\nginx.conf",
+      "details": "nginx.conf file present"
+    },
+    {
+      "tech": "backend (upstream)",
+      "category": "backend",
+      "confidence": 0.7,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\nginx.conf",
+      "details": "Nginx upstream block 'backend' suggests backend service"
+    },
+    {
+      "tech": "Static Frontend",
+      "category": "frontend",
+      "confidence": 0.6,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\nginx.conf",
+      "details": "Nginx serves static files (dist/build/public)"
+    },
+    {
+      "tech": "WebSocket",
+      "category": "backend",
+      "confidence": 0.8,
+      "source_file": "C:\\Users\\Bowei\\Downloads\\archsketch\\samples\\fullstack-app\\nginx.conf",
+      "details": "WebSocket proxy configuration found"
+    }
+  ]
+}

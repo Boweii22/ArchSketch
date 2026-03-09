@@ -11,6 +11,7 @@ from .detectors import (
     detect_from_docker_compose,
     detect_from_dockerfile,
     detect_from_env_files,
+    detect_from_nginx_conf,
     detect_from_package_json,
     detect_from_requirements,
 )
@@ -95,11 +96,48 @@ def run_detection(path: Path) -> tuple[list[TechnologyDetection], "Architecture"
     for env_file in scan_result.get_files(".env"):
         detections.extend(detect_from_env_files(env_file))
     
+    # Nginx config detection
+    for nginx_file in scan_result.get_files("nginx.conf"):
+        detections.extend(detect_from_nginx_conf(nginx_file))
+    
     # Run inference
     engine = InferenceEngine()
     architecture = engine.infer(detections)
     
     return detections, architecture
+
+
+def _build_json_output(detections: list, architecture) -> dict:
+    """Build JSON output dictionary."""
+    return {
+        "nodes": [
+            {
+                "id": n.id,
+                "label": n.label,
+                "role": n.role.value,
+                "technologies": n.technologies,
+            }
+            for n in architecture.nodes
+        ],
+        "edges": [
+            {
+                "source": e.source,
+                "target": e.target,
+                "relation": e.relation,
+            }
+            for e in architecture.edges
+        ],
+        "detections": [
+            {
+                "tech": d.tech,
+                "category": d.category.value,
+                "confidence": d.confidence,
+                "source_file": d.source_file,
+                "details": d.details,
+            }
+            for d in detections
+        ],
+    }
 
 
 @app.command()
@@ -116,7 +154,13 @@ def analyze(
         False,
         "--json",
         "-j",
-        help="Output as JSON.",
+        help="Output as JSON to stdout.",
+    ),
+    output_file: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Write JSON output to file.",
     ),
 ) -> None:
     """Analyze a project and display its architecture."""
@@ -124,37 +168,16 @@ def analyze(
     try:
         detections, architecture = run_detection(path)
         
-        if json_output:
+        if json_output or output_file:
             import json
-            output = {
-                "nodes": [
-                    {
-                        "id": n.id,
-                        "label": n.label,
-                        "role": n.role.value,
-                        "technologies": n.technologies,
-                    }
-                    for n in architecture.nodes
-                ],
-                "edges": [
-                    {
-                        "source": e.source,
-                        "target": e.target,
-                        "relation": e.relation,
-                    }
-                    for e in architecture.edges
-                ],
-                "detections": [
-                    {
-                        "tech": d.tech,
-                        "category": d.category.value,
-                        "confidence": d.confidence,
-                        "source_file": d.source_file,
-                    }
-                    for d in detections
-                ],
-            }
-            console.print_json(json.dumps(output))
+            output = _build_json_output(detections, architecture)
+            
+            if output_file:
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(output, f, indent=2)
+                console.print(f"[green]Wrote architecture to: {output_file}[/green]")
+            else:
+                console.print_json(json.dumps(output))
         else:
             render_ascii(architecture, console)
             
@@ -246,6 +269,147 @@ def show(
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
+
+
+@app.command()
+def explain(
+    path: Path = typer.Argument(
+        ...,
+        help="Path to the project directory to analyze.",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+    ),
+) -> None:
+    """Explain how the architecture was inferred (show reasoning)."""
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+    
+    try:
+        detections, architecture = run_detection(path)
+        
+        if not detections:
+            console.print("[yellow]No technologies detected.[/yellow]")
+            raise typer.Exit(0)
+        
+        console.print()
+        
+        # Group detections by category
+        from collections import defaultdict
+        by_category: dict[str, list] = defaultdict(list)
+        for det in detections:
+            by_category[det.category.value].append(det)
+        
+        # Print detection reasoning
+        console.print(Panel(
+            "[bold]Detection Reasoning[/bold]\n\n"
+            "Below is how ArchSketch analyzed your project files\n"
+            "and classified each detected technology.",
+            border_style="blue",
+        ))
+        console.print()
+        
+        # Create table for each category
+        for category, dets in sorted(by_category.items()):
+            table = Table(
+                title=f"[bold]{category.replace('_', ' ').title()}[/bold]",
+                show_header=True,
+                header_style="bold cyan",
+                border_style="dim",
+            )
+            table.add_column("Technology", style="bold white")
+            table.add_column("Confidence", justify="center")
+            table.add_column("Source File", style="dim", max_width=30)
+            table.add_column("Reasoning", style="yellow", max_width=40)
+            
+            # Deduplicate by tech name
+            seen = set()
+            for det in sorted(dets, key=lambda d: -d.confidence):
+                if det.tech in seen:
+                    continue
+                seen.add(det.tech)
+                
+                # Confidence display
+                conf_pct = int(det.confidence * 100)
+                if conf_pct >= 90:
+                    conf_str = f"[green]{conf_pct}%[/green]"
+                elif conf_pct >= 70:
+                    conf_str = f"[yellow]{conf_pct}%[/yellow]"
+                else:
+                    conf_str = f"[red]{conf_pct}%[/red]"
+                
+                # Truncate source path
+                source = det.source_file
+                if len(source) > 30:
+                    source = "..." + source[-27:]
+                
+                # Reasoning
+                reasoning = det.details or "Pattern matched"
+                
+                table.add_row(det.tech, conf_str, source, reasoning)
+            
+            console.print(table)
+            console.print()
+        
+        # Show inference summary
+        console.print(Panel(
+            "[bold]Inference Summary[/bold]",
+            border_style="green",
+        ))
+        
+        inference_table = Table(show_header=True, header_style="bold green")
+        inference_table.add_column("Role", style="bold")
+        inference_table.add_column("Assigned Technology")
+        inference_table.add_column("Rule Applied", style="dim")
+        
+        for node in architecture.nodes:
+            tech = node.technologies[0] if node.technologies else "Unknown"
+            
+            # Describe the rule
+            rule = _get_inference_rule(node.role.value, tech)
+            
+            inference_table.add_row(
+                node.role.value,
+                tech,
+                rule,
+            )
+        
+        console.print(inference_table)
+        console.print()
+        
+        # Show edges
+        if architecture.edges:
+            console.print("[bold]Inferred Connections:[/bold]")
+            for edge in architecture.edges:
+                source_node = architecture.get_node(edge.source)
+                target_node = architecture.get_node(edge.target)
+                if source_node and target_node:
+                    console.print(
+                        f"  [cyan]{source_node.role.value}[/cyan] "
+                        f"[dim]--{edge.relation}-->[/dim] "
+                        f"[cyan]{target_node.role.value}[/cyan]"
+                    )
+            console.print()
+        
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+def _get_inference_rule(role: str, tech: str) -> str:
+    """Get a human-readable inference rule description."""
+    rules = {
+        "Frontend": f"{tech} detected in dependencies -> Frontend role",
+        "Backend": f"{tech} is a server framework -> Backend role",
+        "Database": f"{tech} is a database system -> Database role",
+        "Cache": f"{tech} is a caching system -> Cache role",
+        "Reverse Proxy": f"{tech} is a web server/proxy -> Reverse Proxy role",
+        "Worker": f"{tech} is a task queue -> Worker role",
+        "Queue": f"{tech} is a message broker -> Queue role",
+    }
+    return rules.get(role, "Pattern matched -> Role assigned")
 
 
 if __name__ == "__main__":
