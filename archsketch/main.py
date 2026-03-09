@@ -13,6 +13,7 @@ from .detectors import (
     detect_from_env_files,
     detect_from_nginx_conf,
     detect_from_package_json,
+    detect_from_pom_xml,
     detect_from_requirements,
 )
 from .inference import InferenceEngine
@@ -100,6 +101,10 @@ def run_detection(path: Path) -> tuple[list[TechnologyDetection], "Architecture"
     for nginx_file in scan_result.get_files("nginx.conf"):
         detections.extend(detect_from_nginx_conf(nginx_file))
     
+    # Maven pom.xml detection (Java/Spring Boot)
+    for pom_file in scan_result.get_files("pom.xml"):
+        detections.extend(detect_from_pom_xml(pom_file))
+    
     # Run inference
     engine = InferenceEngine()
     architecture = engine.infer(detections)
@@ -162,8 +167,21 @@ def analyze(
         "-o",
         help="Write JSON output to file.",
     ),
+    compact: bool = typer.Option(
+        False,
+        "--compact",
+        "-c",
+        help="Show diagram only, no detections table.",
+    ),
+    no_table: bool = typer.Option(
+        False,
+        "--no-table",
+        help="Same as --compact: diagram only.",
+    ),
 ) -> None:
     """Analyze a project and display its architecture."""
+    
+    show_table = not (compact or no_table)
     
     try:
         detections, architecture = run_detection(path)
@@ -179,7 +197,7 @@ def analyze(
             else:
                 console.print_json(json.dumps(output))
         else:
-            render_ascii(architecture, console)
+            render_ascii(architecture, console, show_table=show_table)
             
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -203,7 +221,7 @@ def export(
         "mermaid",
         "--format",
         "-f",
-        help="Export format (mermaid).",
+        help="Export format: mermaid, graphviz (SVG), or dot.",
     ),
     output: Path = typer.Option(
         Path("architecture.mmd"),
@@ -214,8 +232,12 @@ def export(
 ) -> None:
     """Export architecture diagram to a file."""
     
-    if format.lower() != "mermaid":
-        console.print(f"[red]Unsupported format: {format}. Use 'mermaid'.[/red]")
+    fmt = format.lower()
+    if fmt not in ("mermaid", "graphviz", "svg", "dot"):
+        console.print(
+            f"[red]Unsupported format: {format}. "
+            "Use: mermaid, graphviz (or svg), or dot.[/red]"
+        )
         raise typer.Exit(1)
     
     try:
@@ -225,15 +247,24 @@ def export(
             console.print("[yellow]No architecture to export.[/yellow]")
             raise typer.Exit(0)
         
-        output_path = export_mermaid(architecture, output)
-        console.print(f"[green]Exported Mermaid diagram to: {output_path}[/green]")
+        if fmt == "mermaid":
+            output_path = export_mermaid(architecture, output)
+            console.print(f"[green]Exported Mermaid diagram to: {output_path}[/green]")
+            console.print()
+            console.print("[dim]Content:[/dim]")
+            console.print(render_mermaid(architecture))
+        elif fmt in ("graphviz", "svg"):
+            from .renderers.graphviz_renderer import export_svg
+            output_path = export_svg(architecture, output)
+            console.print(f"[green]Exported SVG to: {output_path}[/green]")
+        else:  # dot
+            from .renderers.graphviz_renderer import export_dot
+            output_path = export_dot(architecture, output)
+            console.print(f"[green]Exported DOT to: {output_path}[/green]")
         
-        # Also show the content
-        console.print()
-        console.print("[dim]Content:[/dim]")
-        mermaid_content = render_mermaid(architecture)
-        console.print(mermaid_content)
-        
+    except RuntimeError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)

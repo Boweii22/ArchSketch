@@ -68,12 +68,24 @@ archsketch analyze /path/to/your/project
 archsketch analyze .                           # Current directory
 archsketch analyze /path/to/your/project       # Any project folder
 archsketch analyze ~/code/my-app               # Home directory path
+archsketch analyze . --compact                 # Diagram only, no detections table
+archsketch analyze . --no-table                # Same as --compact
 ```
 
 ### Export to Mermaid
 
 ```bash
 archsketch export /path/to/project --format mermaid --output architecture.mmd
+```
+
+### Export to SVG (shareable image)
+
+```bash
+# Requires: pip install graphviz AND Graphviz binaries (https://graphviz.org/download/)
+archsketch export . --format graphviz --output architecture.svg
+
+# Or export DOT file (no binary needed), then convert: dot -Tsvg architecture.dot -o architecture.svg
+archsketch export . --format dot --output architecture.dot
 ```
 
 Generates:
@@ -119,9 +131,9 @@ ArchSketch reads these files to understand your stack:
 
 | Role | Technologies |
 |------|-------------|
-| **Frontend** | React, Next.js, Vue.js, Nuxt.js, Angular, Svelte |
-| **Backend** | Express, NestJS, FastAPI, Flask, Django, Fastify |
-| **Database** | PostgreSQL, MySQL, MongoDB, SQLite |
+| **Frontend** | React, Next.js, Vue.js, Nuxt.js, Angular, Svelte, **Remix**, **Astro**, **SolidJS**, **Qwik**, Preact |
+| **Backend** | Express, NestJS, FastAPI, Flask, Django, Fastify, **Hono**, **Elysia**, **Spring Boot** (pom.xml), Micronaut, Quarkus |
+| **Database** | PostgreSQL, MySQL, MongoDB, SQLite, **Supabase** |
 | **Cache** | Redis, Memcached |
 | **Reverse Proxy** | Nginx, Traefik, Caddy |
 | **Worker** | Celery, Bull, RQ |

@@ -34,13 +34,19 @@ ROLE_ICONS = {
 }
 
 
-def render_ascii(architecture: Architecture, console: Console | None = None) -> str:
+def render_ascii(
+    architecture: Architecture,
+    console: Console | None = None,
+    *,
+    show_table: bool = True,
+) -> str:
     """
     Render architecture as a beautiful ASCII diagram in the terminal.
     
     Args:
         architecture: The architecture to render
         console: Rich console for output (optional)
+        show_table: If False, skip the detected technologies table (compact mode).
         
     Returns:
         String representation of the architecture
@@ -60,8 +66,9 @@ def render_ascii(architecture: Architecture, console: Console | None = None) -> 
     # Print the legend
     _print_legend(architecture, console)
     
-    # Print detected technologies table
-    _print_detections_table(architecture, console)
+    # Print detected technologies table (unless compact)
+    if show_table:
+        _print_detections_table(architecture, console)
     
     return ""
 

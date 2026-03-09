@@ -16,6 +16,8 @@ TECH_PATTERNS = {
     "tornado": ("Tornado", TechCategory.BACKEND),
     "sanic": ("Sanic", TechCategory.BACKEND),
     "aiohttp": ("aiohttp", TechCategory.BACKEND),
+    "litestar": ("Litestar", TechCategory.BACKEND),
+    "blacksheep": ("BlackSheep", TechCategory.BACKEND),
     
     # Database clients
     "psycopg2": ("PostgreSQL", TechCategory.DATABASE),
@@ -30,6 +32,7 @@ TECH_PATTERNS = {
     "sqlmodel": ("SQLModel", TechCategory.DATABASE),
     "tortoise-orm": ("Tortoise ORM", TechCategory.DATABASE),
     "peewee": ("Peewee", TechCategory.DATABASE),
+    "supabase": ("Supabase", TechCategory.DATABASE),
     
     # Cache
     "redis": ("Redis", TechCategory.CACHE),

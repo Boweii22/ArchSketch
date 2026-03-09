@@ -14,6 +14,14 @@ TECH_PATTERNS = {
     "nuxt": ("Nuxt.js", TechCategory.FRONTEND),
     "@angular/core": ("Angular", TechCategory.FRONTEND),
     "svelte": ("Svelte", TechCategory.FRONTEND),
+    # Remix, Astro, Solid, Qwik
+    "remix": ("Remix", TechCategory.FRONTEND),
+    "@remix-run/react": ("Remix", TechCategory.FRONTEND),
+    "astro": ("Astro", TechCategory.FRONTEND),
+    "solid-js": ("SolidJS", TechCategory.FRONTEND),
+    "@solidjs/router": ("SolidJS", TechCategory.FRONTEND),
+    "@builder.io/qwik": ("Qwik", TechCategory.FRONTEND),
+    "preact": ("Preact", TechCategory.FRONTEND),
     
     # Backend frameworks
     "express": ("Express", TechCategory.BACKEND),
@@ -21,8 +29,11 @@ TECH_PATTERNS = {
     "fastify": ("Fastify", TechCategory.BACKEND),
     "koa": ("Koa", TechCategory.BACKEND),
     "hapi": ("Hapi", TechCategory.BACKEND),
+    "hono": ("Hono", TechCategory.BACKEND),
+    "elysia": ("Elysia", TechCategory.BACKEND),
+    "trpc": ("tRPC", TechCategory.BACKEND),
     
-    # Database clients
+    # Database / BaaS
     "pg": ("PostgreSQL", TechCategory.DATABASE),
     "mysql": ("MySQL", TechCategory.DATABASE),
     "mysql2": ("MySQL", TechCategory.DATABASE),
@@ -33,6 +44,8 @@ TECH_PATTERNS = {
     "@prisma/client": ("Prisma", TechCategory.DATABASE),
     "typeorm": ("TypeORM", TechCategory.DATABASE),
     "sequelize": ("Sequelize", TechCategory.DATABASE),
+    "@supabase/supabase-js": ("Supabase", TechCategory.DATABASE),
+    "@supabase/auth-helpers-nextjs": ("Supabase", TechCategory.DATABASE),
     
     # Cache
     "redis": ("Redis", TechCategory.CACHE),

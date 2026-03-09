@@ -94,6 +94,66 @@ class TestPackageJsonDetector:
             
             assert any(d.tech == "PostgreSQL" for d in detections)
             assert any(d.category == TechCategory.DATABASE for d in detections)
+    
+    def test_detect_remix(self):
+        """Test Remix detection."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({
+                "dependencies": {
+                    "@remix-run/react": "^2.0.0",
+                    "remix": "^2.0.0"
+                }
+            }, f)
+            f.flush()
+            
+            detections = detect_from_package_json(Path(f.name))
+            
+            assert any(d.tech == "Remix" for d in detections)
+            assert any(d.category == TechCategory.FRONTEND for d in detections)
+    
+    def test_detect_astro(self):
+        """Test Astro detection."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({
+                "dependencies": {
+                    "astro": "^4.0.0"
+                }
+            }, f)
+            f.flush()
+            
+            detections = detect_from_package_json(Path(f.name))
+            
+            assert any(d.tech == "Astro" for d in detections)
+    
+    def test_detect_supabase(self):
+        """Test Supabase detection."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({
+                "dependencies": {
+                    "@supabase/supabase-js": "^2.0.0"
+                }
+            }, f)
+            f.flush()
+            
+            detections = detect_from_package_json(Path(f.name))
+            
+            assert any(d.tech == "Supabase" for d in detections)
+            assert any(d.category == TechCategory.DATABASE for d in detections)
+    
+    def test_detect_hono(self):
+        """Test Hono detection."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({
+                "dependencies": {
+                    "hono": "^4.0.0"
+                }
+            }, f)
+            f.flush()
+            
+            detections = detect_from_package_json(Path(f.name))
+            
+            assert any(d.tech == "Hono" for d in detections)
+            assert any(d.category == TechCategory.BACKEND for d in detections)
 
 
 class TestRequirementsDetector:
