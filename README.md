@@ -60,6 +60,10 @@ archsketch analyze /path/to/your/project
 +---------------------------------------------------------+
 ```
 
+## Screenshots
+<img width="1886" height="903" alt="image" src="https://github.com/user-attachments/assets/d3c7909b-f350-4a37-8786-cace590750ee" />
+<img width="1917" height="1074" alt="image" src="https://github.com/user-attachments/assets/41fe360f-4b33-4e15-a96f-e86b3ce597bf" />
+
 ## Usage
 
 ### Analyze any project
