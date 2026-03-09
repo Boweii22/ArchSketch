@@ -85,14 +85,21 @@ def export_svg(architecture: Architecture, output_path: str | Path) -> Path:
         dot = graphviz.Source(dot_source)
         dot.render(
             filename=output.stem,
-            directory=output.parent,
+            directory=str(output.parent),
             format="svg",
             cleanup=True,
         )
+    except graphviz.ExecutableNotFound as e:
+        raise RuntimeError(
+            "Graphviz 'dot' executable not found. "
+            "Install Graphviz and add its bin folder to PATH: "
+            "https://graphviz.org/download/ "
+            "On Windows, typical path: C:\\Program Files\\Graphviz\\bin"
+        ) from e
     except Exception as e:
         raise RuntimeError(
-            "Failed to generate SVG. Ensure Graphviz is installed: "
-            "https://graphviz.org/download/"
+            f"Failed to generate SVG: {e}. "
+            "Ensure Graphviz is installed and 'dot' is in your PATH."
         ) from e
     
     # graphviz renders to output.parent/output.stem.svg
