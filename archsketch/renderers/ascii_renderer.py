@@ -99,7 +99,7 @@ def _create_node_box(node: ArchitectureNode, width: int = 28, show_explanation: 
     )
 
 
-def _print_vertical_diagram(architecture: Architecture, console: Console) -> None:
+def _print_vertical_diagram(architecture: Architecture, console: Console, *, show_sources: bool = False) -> None:
     """Print a vertical flow diagram with boxes and arrows."""
     
     # Define the flow order
@@ -142,10 +142,10 @@ def _print_vertical_diagram(architecture: Architecture, console: Console) -> Non
         
         # For backend, show side branches
         if role == ArchitectureRole.BACKEND and side_nodes:
-            _print_backend_with_branches(node, side_nodes, console, box_width)
+            _print_backend_with_branches(node, side_nodes, console, box_width, show_sources=show_sources)
         else:
             # Print centered node
-            console.print(Align.center(_create_node_box(node, box_width)))
+            console.print(Align.center(_create_node_box(node, box_width, show_explanation=show_sources)))
         
         # Print arrow to next node (if not last)
         if i < len(main_flow_roles) - 1:
