@@ -532,7 +532,7 @@ def diff(
                 if item.type == "blob":
                     out_path = tmp / item.path
                     out_path.parent.mkdir(parents=True, exist_ok=True)
-                    out_path.write_bytes(item.data_stream.read().read())
+                    out_path.write_bytes(item.data_stream.read())
         except Exception:
             shutil.rmtree(tmp, ignore_errors=True)
             raise
