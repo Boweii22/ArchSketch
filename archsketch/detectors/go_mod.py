@@ -29,7 +29,7 @@ TECH_PATTERNS = {
     "jackc/pgx": ("PostgreSQL", TechCategory.DATABASE),
     "go-sql-driver/mysql": ("MySQL", TechCategory.DATABASE),
     "mattn/go-sqlite3": ("SQLite", TechCategory.DATABASE),
-    "mongodb/mongo-driver": ("MongoDB", TechCategory.DATABASE),
+    "mongo-driver": ("MongoDB", TechCategory.DATABASE),
     "uptrace/bun": ("Bun ORM", TechCategory.DATABASE),
     "jmoiron/sqlx": ("SQLx", TechCategory.DATABASE),
 

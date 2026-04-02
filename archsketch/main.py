@@ -1,7 +1,16 @@
 """CLI entry point for ArchSketch."""
 
+import base64
+import contextlib
+import json as _json
+import re
+import shutil
+import subprocess
+import tempfile
+import urllib.error
+import urllib.request
 from pathlib import Path
-from typing import Optional
+from typing import Generator, Optional
 
 import typer
 from rich.console import Console
@@ -42,6 +51,171 @@ app = typer.Typer(
     add_completion=False,
 )
 console = Console()
+
+# ---------------------------------------------------------------------------
+# GitHub remote target helpers
+# ---------------------------------------------------------------------------
+
+def _parse_github_target(target: str) -> tuple[str, str, str] | None:
+    """Parse a GitHub URL or owner/repo shorthand.
+
+    Returns (owner, repo, ref) or None if not a GitHub target.
+    """
+    # https://github.com/owner/repo  or  https://github.com/owner/repo/tree/branch
+    m = re.match(
+        r'(?:https?://)?github\.com/([^/]+)/([^/]+?)(?:\.git)?(?:/tree/([^\s]+))?/?$',
+        target.strip(),
+    )
+    if m:
+        return m.group(1), m.group(2), m.group(3) or ""
+    # owner/repo shorthand — exactly two slash-separated parts, owner must start with alphanumeric
+    m = re.match(r'^([a-zA-Z0-9][a-zA-Z0-9_.-]*)/([a-zA-Z0-9][a-zA-Z0-9_.-]*)$', target.strip())
+    if m:
+        return m.group(1), m.group(2), ""
+    return None
+
+
+def _github_api(url: str) -> object:
+    """GET a GitHub API URL and return parsed JSON. Raises RuntimeError on failure."""
+    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
+                                               "User-Agent": "archsketch"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return _json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            raise RuntimeError(
+                "GitHub API rate limit reached (60 req/hr for unauthenticated requests). "
+                "Try again later or use --clone."
+            )
+        if e.code == 404:
+            raise RuntimeError("Repository not found or is private.")
+        raise RuntimeError(f"GitHub API error {e.code}: {e.reason}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Network error: {e.reason}")
+
+
+# Files/patterns worth fetching from the GitHub tree
+_FETCH_EXACT = {
+    "package.json", "requirements.txt", "pyproject.toml", "Pipfile",
+    "pom.xml", "build.gradle", "build.gradle.kts",
+    "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml",
+    "Dockerfile", ".env", ".env.example", ".env.local",
+    "nginx.conf", "Procfile", "Makefile",
+    "Cargo.toml", "go.mod", "Gemfile", "composer.json",
+    "pubspec.yaml", "mix.exs", "Package.swift", "CMakeLists.txt",
+}
+
+def _should_fetch(path: str) -> bool:
+    """Return True if this tree path is an architecture-relevant file."""
+    name = path.split("/")[-1]
+    if name in _FETCH_EXACT:
+        return True
+    if name.startswith("Dockerfile"):
+        return True
+    if name.startswith("docker-compose") and name.endswith((".yml", ".yaml")):
+        return True
+    if name.startswith(".env"):
+        return True
+    if name.endswith(".tf"):
+        return True
+    if name.endswith((".csproj", ".fsproj", ".vbproj")):
+        return True
+    # Kubernetes manifests
+    if name.endswith((".yaml", ".yml")):
+        parts = path.lower().split("/")
+        if any(p in ("k8s", "kubernetes", "deploy") for p in parts):
+            return True
+        if name.split(".")[0] in (
+            "deployment", "service", "ingress", "daemonset",
+            "statefulset", "cronjob", "job", "configmap", "secret",
+        ):
+            return True
+    return False
+
+
+def _fetch_github_to_tempdir(owner: str, repo: str, ref: str) -> Path:
+    """Download only architecture-relevant files from a public GitHub repo."""
+    # 1. Resolve default branch if ref not specified
+    if not ref:
+        repo_meta = _github_api(f"https://api.github.com/repos/{owner}/{repo}")
+        ref = repo_meta["default_branch"]  # type: ignore[index]
+        console.print(f"[dim]Default branch: {ref}[/dim]")
+
+    # 2. Fetch the full file tree in one API call
+    console.print(f"[dim]Fetching file tree for {owner}/{repo}@{ref}...[/dim]")
+    tree_data = _github_api(
+        f"https://api.github.com/repos/{owner}/{repo}/git/trees/{ref}?recursive=1"
+    )
+    all_paths = [
+        item["path"]
+        for item in tree_data["tree"]  # type: ignore[index]
+        if item["type"] == "blob"
+    ]
+
+    relevant = [p for p in all_paths if _should_fetch(p)]
+    if not relevant:
+        console.print("[yellow]No architecture-related files found in repository.[/yellow]")
+        return Path(tempfile.mkdtemp(prefix="archsketch_"))
+
+    console.print(f"[dim]Fetching {len(relevant)} architecture file(s)...[/dim]")
+
+    # 3. Fetch each file's content via raw.githubusercontent.com
+    tmp = Path(tempfile.mkdtemp(prefix="archsketch_"))
+    for path in relevant:
+        raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}"
+        req = urllib.request.Request(raw_url, headers={"User-Agent": "archsketch"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                content = resp.read()
+        except urllib.error.URLError:
+            continue  # skip files we can't fetch
+        dest = tmp / path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(content)
+
+    return tmp
+
+
+def _clone_github(owner: str, repo: str, ref: str) -> Path:
+    """Shallow-clone a GitHub repo into a temp dir."""
+    url = f"https://github.com/{owner}/{repo}.git"
+    tmp = tempfile.mkdtemp(prefix="archsketch_")
+    cmd = ["git", "clone", "--depth", "1"]
+    if ref:
+        cmd += ["--branch", ref]
+    cmd += [url, tmp]
+    console.print(f"[dim]Cloning {url}...[/dim]")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise RuntimeError(f"git clone failed:\n{result.stderr.strip()}")
+    return Path(tmp)
+
+
+@contextlib.contextmanager
+def _resolve_target(target: str, clone: bool = False) -> Generator[Path, None, None]:
+    """Yield a local Path for target, cloning/fetching if it's a GitHub reference."""
+    parsed = _parse_github_target(target)
+    if parsed:
+        owner, repo, ref = parsed
+        tmp: Path | None = None
+        try:
+            if clone:
+                tmp = _clone_github(owner, repo, ref)
+            else:
+                tmp = _fetch_github_to_tempdir(owner, repo, ref)
+            yield tmp
+        finally:
+            if tmp and tmp.exists():
+                shutil.rmtree(tmp, ignore_errors=True)
+    else:
+        p = Path(target).resolve()
+        if not p.exists():
+            raise FileNotFoundError(f"Directory not found: {p}")
+        if not p.is_dir():
+            raise NotADirectoryError(f"Not a directory: {p}")
+        yield p
 
 
 def version_callback(value: bool) -> None:
@@ -220,13 +394,9 @@ def _build_json_output(detections: list, architecture) -> dict:
 
 @app.command()
 def analyze(
-    path: Path = typer.Argument(
+    target: str = typer.Argument(
         ...,
-        help="Path to the project directory to analyze.",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        resolve_path=True,
+        help="Local project path, GitHub URL, or owner/repo (e.g. tiangolo/fastapi).",
     ),
     json_output: bool = typer.Option(
         False,
@@ -256,27 +426,41 @@ def analyze(
         "--show-sources",
         help="Show 'From: ...' source file in each diagram box.",
     ),
+    clone: bool = typer.Option(
+        False,
+        "--clone",
+        help="Clone the repository locally instead of fetching via API (GitHub targets only).",
+    ),
 ) -> None:
-    """Analyze a project and display its architecture."""
-    
+    """Analyze a project and display its architecture.
+
+    TARGET can be a local directory, a full GitHub URL, or an owner/repo shorthand:
+
+    \b
+      archsketch analyze .
+      archsketch analyze https://github.com/tiangolo/fastapi
+      archsketch analyze tiangolo/fastapi
+      archsketch analyze tiangolo/fastapi --clone
+    """
     show_table = not (compact or no_table)
-    
+
     try:
-        detections, architecture = run_detection(path)
-        
-        if json_output or output_file:
-            import json
-            output = _build_json_output(detections, architecture)
-            
-            if output_file:
-                with open(output_file, "w", encoding="utf-8") as f:
-                    json.dump(output, f, indent=2)
-                console.print(f"[green]Wrote architecture to: {output_file}[/green]")
+        with _resolve_target(target, clone=clone) as path:
+            detections, architecture = run_detection(path)
+
+            if json_output or output_file:
+                import json
+                output = _build_json_output(detections, architecture)
+
+                if output_file:
+                    with open(output_file, "w", encoding="utf-8") as f:
+                        json.dump(output, f, indent=2)
+                    console.print(f"[green]Wrote architecture to: {output_file}[/green]")
+                else:
+                    console.print_json(json.dumps(output))
             else:
-                console.print_json(json.dumps(output))
-        else:
-            render_ascii(architecture, console, show_table=show_table, show_sources=show_sources)
-            
+                render_ascii(architecture, console, show_table=show_table, show_sources=show_sources)
+
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -287,13 +471,9 @@ def analyze(
 
 @app.command()
 def export(
-    path: Path = typer.Argument(
+    target: str = typer.Argument(
         ...,
-        help="Path to the project directory to analyze.",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        resolve_path=True,
+        help="Local project path, GitHub URL, or owner/repo.",
     ),
     format: str = typer.Option(
         "mermaid",
@@ -307,9 +487,14 @@ def export(
         "-o",
         help="Output file path.",
     ),
+    clone: bool = typer.Option(
+        False,
+        "--clone",
+        help="Clone the repository instead of fetching via API (GitHub targets only).",
+    ),
 ) -> None:
     """Export architecture diagram to a file."""
-    
+
     fmt = format.lower()
     if fmt not in ("mermaid", "graphviz", "svg", "dot"):
         console.print(
@@ -317,29 +502,30 @@ def export(
             "Use: mermaid, graphviz (or svg), or dot.[/red]"
         )
         raise typer.Exit(1)
-    
+
     try:
-        _, architecture = run_detection(path)
-        
-        if not architecture.nodes:
-            console.print("[yellow]No architecture to export.[/yellow]")
-            raise typer.Exit(0)
-        
-        if fmt == "mermaid":
-            output_path = export_mermaid(architecture, output)
-            console.print(f"[green]Exported Mermaid diagram to: {output_path}[/green]")
-            console.print()
-            console.print("[dim]Content:[/dim]")
-            console.print(render_mermaid(architecture))
-        elif fmt in ("graphviz", "svg"):
-            from .renderers.graphviz_renderer import export_svg
-            output_path = export_svg(architecture, output)
-            console.print(f"[green]Exported SVG to: {output_path}[/green]")
-        else:  # dot
-            from .renderers.graphviz_renderer import export_dot
-            output_path = export_dot(architecture, output)
-            console.print(f"[green]Exported DOT to: {output_path}[/green]")
-        
+        with _resolve_target(target, clone=clone) as path:
+            _, architecture = run_detection(path)
+
+            if not architecture.nodes:
+                console.print("[yellow]No architecture to export.[/yellow]")
+                raise typer.Exit(0)
+
+            if fmt == "mermaid":
+                output_path = export_mermaid(architecture, output)
+                console.print(f"[green]Exported Mermaid diagram to: {output_path}[/green]")
+                console.print()
+                console.print("[dim]Content:[/dim]")
+                console.print(render_mermaid(architecture))
+            elif fmt in ("graphviz", "svg"):
+                from .renderers.graphviz_renderer import export_svg
+                output_path = export_svg(architecture, output)
+                console.print(f"[green]Exported SVG to: {output_path}[/green]")
+            else:  # dot
+                from .renderers.graphviz_renderer import export_dot
+                output_path = export_dot(architecture, output)
+                console.print(f"[green]Exported DOT to: {output_path}[/green]")
+
     except RuntimeError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
@@ -350,31 +536,33 @@ def export(
 
 @app.command()
 def show(
-    path: Path = typer.Argument(
+    target: str = typer.Argument(
         ...,
-        help="Path to the project directory to analyze.",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        resolve_path=True,
+        help="Local project path, GitHub URL, or owner/repo.",
+    ),
+    clone: bool = typer.Option(
+        False,
+        "--clone",
+        help="Clone the repository instead of fetching via API (GitHub targets only).",
     ),
 ) -> None:
     """Show Mermaid diagram in terminal (without exporting)."""
-    
+
     try:
-        _, architecture = run_detection(path)
-        
-        if not architecture.nodes:
-            console.print("[yellow]No architecture detected.[/yellow]")
-            raise typer.Exit(0)
-        
-        mermaid_content = render_mermaid(architecture)
-        console.print()
-        console.print("[bold]Mermaid Diagram:[/bold]")
-        console.print()
-        console.print(mermaid_content)
-        console.print()
-        
+        with _resolve_target(target, clone=clone) as path:
+            _, architecture = run_detection(path)
+
+            if not architecture.nodes:
+                console.print("[yellow]No architecture detected.[/yellow]")
+                raise typer.Exit(0)
+
+            mermaid_content = render_mermaid(architecture)
+            console.print()
+            console.print("[bold]Mermaid Diagram:[/bold]")
+            console.print()
+            console.print(mermaid_content)
+            console.print()
+
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -382,13 +570,14 @@ def show(
 
 @app.command()
 def explain(
-    path: Path = typer.Argument(
+    target: str = typer.Argument(
         ...,
-        help="Path to the project directory to analyze.",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        resolve_path=True,
+        help="Local project path, GitHub URL, or owner/repo.",
+    ),
+    clone: bool = typer.Option(
+        False,
+        "--clone",
+        help="Clone the repository instead of fetching via API (GitHub targets only).",
     ),
 ) -> None:
     """Explain how the architecture was inferred (show reasoning)."""
@@ -397,111 +586,96 @@ def explain(
     from rich.text import Text
     
     try:
-        detections, architecture = run_detection(path)
-        
-        if not detections:
-            console.print("[yellow]No technologies detected.[/yellow]")
-            raise typer.Exit(0)
-        
-        console.print()
-        
-        # Group detections by category
-        from collections import defaultdict
-        by_category: dict[str, list] = defaultdict(list)
-        for det in detections:
-            by_category[det.category.value].append(det)
-        
-        # Print detection reasoning
-        console.print(Panel(
-            "[bold]Detection Reasoning[/bold]\n\n"
-            "Below is how ArchSketch analyzed your project files\n"
-            "and classified each detected technology.",
-            border_style="blue",
-        ))
-        console.print()
-        
-        # Create table for each category
-        for category, dets in sorted(by_category.items()):
-            table = Table(
-                title=f"[bold]{category.replace('_', ' ').title()}[/bold]",
-                show_header=True,
-                header_style="bold cyan",
-                border_style="dim",
-            )
-            table.add_column("Technology", style="bold white")
-            table.add_column("Confidence", justify="center")
-            table.add_column("Source File", style="dim", max_width=30)
-            table.add_column("Reasoning", style="yellow", max_width=40)
-            
-            # Deduplicate by tech name
-            seen = set()
-            for det in sorted(dets, key=lambda d: -d.confidence):
-                if det.tech in seen:
-                    continue
-                seen.add(det.tech)
-                
-                # Confidence display
-                conf_pct = int(det.confidence * 100)
-                if conf_pct >= 90:
-                    conf_str = f"[green]{conf_pct}%[/green]"
-                elif conf_pct >= 70:
-                    conf_str = f"[yellow]{conf_pct}%[/yellow]"
-                else:
-                    conf_str = f"[red]{conf_pct}%[/red]"
-                
-                # Truncate source path
-                source = det.source_file
-                if len(source) > 30:
-                    source = "..." + source[-27:]
-                
-                # Reasoning
-                reasoning = det.details or "Pattern matched"
-                
-                table.add_row(det.tech, conf_str, source, reasoning)
-            
-            console.print(table)
+        with _resolve_target(target, clone=clone) as path:
+            detections, architecture = run_detection(path)
+
+            if not detections:
+                console.print("[yellow]No technologies detected.[/yellow]")
+                raise typer.Exit(0)
+
             console.print()
-        
-        # Show inference summary
-        console.print(Panel(
-            "[bold]Inference Summary[/bold]",
-            border_style="green",
-        ))
-        
-        inference_table = Table(show_header=True, header_style="bold green")
-        inference_table.add_column("Role", style="bold")
-        inference_table.add_column("Assigned Technology")
-        inference_table.add_column("Rule Applied", style="dim")
-        
-        for node in architecture.nodes:
-            tech = node.technologies[0] if node.technologies else "Unknown"
-            
-            # Describe the rule
-            rule = _get_inference_rule(node.role.value, tech)
-            
-            inference_table.add_row(
-                node.role.value,
-                tech,
-                rule,
-            )
-        
-        console.print(inference_table)
-        console.print()
-        
-        # Show edges
-        if architecture.edges:
-            console.print("[bold]Inferred Connections:[/bold]")
-            for edge in architecture.edges:
-                source_node = architecture.get_node(edge.source)
-                target_node = architecture.get_node(edge.target)
-                if source_node and target_node:
-                    console.print(
-                        f"  [cyan]{source_node.role.value}[/cyan] "
-                        f"[dim]--{edge.relation}-->[/dim] "
-                        f"[cyan]{target_node.role.value}[/cyan]"
-                    )
+
+            # Group detections by category
+            from collections import defaultdict
+            by_category: dict[str, list] = defaultdict(list)
+            for det in detections:
+                by_category[det.category.value].append(det)
+
+            # Print detection reasoning
+            console.print(Panel(
+                "[bold]Detection Reasoning[/bold]\n\n"
+                "Below is how ArchSketch analyzed your project files\n"
+                "and classified each detected technology.",
+                border_style="blue",
+            ))
             console.print()
-        
+
+            # Create table for each category
+            for category, dets in sorted(by_category.items()):
+                table = Table(
+                    title=f"[bold]{category.replace('_', ' ').title()}[/bold]",
+                    show_header=True,
+                    header_style="bold cyan",
+                    border_style="dim",
+                )
+                table.add_column("Technology", style="bold white")
+                table.add_column("Confidence", justify="center")
+                table.add_column("Source File", style="dim", max_width=30)
+                table.add_column("Reasoning", style="yellow", max_width=40)
+
+                seen = set()
+                for det in sorted(dets, key=lambda d: -d.confidence):
+                    if det.tech in seen:
+                        continue
+                    seen.add(det.tech)
+
+                    conf_pct = int(det.confidence * 100)
+                    if conf_pct >= 90:
+                        conf_str = f"[green]{conf_pct}%[/green]"
+                    elif conf_pct >= 70:
+                        conf_str = f"[yellow]{conf_pct}%[/yellow]"
+                    else:
+                        conf_str = f"[red]{conf_pct}%[/red]"
+
+                    source = det.source_file
+                    if len(source) > 30:
+                        source = "..." + source[-27:]
+
+                    reasoning = det.details or "Pattern matched"
+                    table.add_row(det.tech, conf_str, source, reasoning)
+
+                console.print(table)
+                console.print()
+
+            # Show inference summary
+            console.print(Panel("[bold]Inference Summary[/bold]", border_style="green"))
+
+            inference_table = Table(show_header=True, header_style="bold green")
+            inference_table.add_column("Role", style="bold")
+            inference_table.add_column("Assigned Technology")
+            inference_table.add_column("Rule Applied", style="dim")
+
+            for node in architecture.nodes:
+                tech = node.technologies[0] if node.technologies else "Unknown"
+                rule = _get_inference_rule(node.role.value, tech)
+                inference_table.add_row(node.role.value, tech, rule)
+
+            console.print(inference_table)
+            console.print()
+
+            if architecture.edges:
+                console.print("[bold]Inferred Connections:[/bold]")
+                for edge in architecture.edges:
+                    source_node = architecture.get_node(edge.source)
+                    target_node = architecture.get_node(edge.target)
+                    if source_node and target_node:
+                        console.print(
+                            f"  [cyan]{source_node.role.value}[/cyan] "
+                            f"[dim]--{edge.relation}-->[/dim] "
+                            f"[cyan]{target_node.role.value}[/cyan]"
+                        )
+                console.print()
+
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
