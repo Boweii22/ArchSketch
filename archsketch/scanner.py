@@ -25,6 +25,22 @@ IMPORTANT_FILES = {
     "nginx.conf",
     "Procfile",
     "Makefile",
+    # Rust
+    "Cargo.toml",
+    # Go
+    "go.mod",
+    # Ruby
+    "Gemfile",
+    # PHP
+    "composer.json",
+    # Dart / Flutter
+    "pubspec.yaml",
+    # Elixir
+    "mix.exs",
+    # Swift
+    "Package.swift",
+    # C / C++
+    "CMakeLists.txt",
 }
 
 # Kubernetes manifest names (collected under KEY_KUBERNETES)
@@ -38,6 +54,7 @@ K8S_MANIFEST_NAMES = frozenset({
 # Synthetic keys for multi-file types (populated in scan_directory)
 KEY_TERRAFORM = "terraform"
 KEY_KUBERNETES = "kubernetes"
+KEY_CSPROJ = "csproj"
 
 # Directories to skip during scanning
 SKIP_DIRS = {
@@ -151,6 +168,13 @@ def scan_directory(path: str | Path) -> ScanResult:
                     result.files[".env"] = []
                 result.files[".env"].append(full_path)
             
+            # .NET project files (.csproj, .fsproj, .vbproj)
+            elif filename.endswith((".csproj", ".fsproj", ".vbproj")):
+                full_path = Path(dirpath) / filename
+                if KEY_CSPROJ not in result.files:
+                    result.files[KEY_CSPROJ] = []
+                result.files[KEY_CSPROJ].append(full_path)
+
             # Terraform .tf files
             elif filename.endswith(".tf"):
                 full_path = Path(dirpath) / filename

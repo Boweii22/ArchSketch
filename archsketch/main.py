@@ -19,12 +19,22 @@ from .detectors import (
     detect_from_procfile,
     detect_from_requirements,
     detect_from_terraform,
+    detect_from_cargo_toml,
+    detect_from_go_mod,
+    detect_from_csproj,
+    detect_from_gemfile,
+    detect_from_composer_json,
+    detect_from_pubspec_yaml,
+    detect_from_mix_exs,
+    detect_from_package_swift,
+    detect_from_cmake,
+    detect_from_extensions,
 )
 from .inference import InferenceEngine
 from .models import TechnologyDetection
 from .renderers import render_ascii, render_mermaid
 from .renderers.mermaid_renderer import export_mermaid
-from .scanner import scan_directory, KEY_KUBERNETES, KEY_TERRAFORM
+from .scanner import scan_directory, KEY_KUBERNETES, KEY_TERRAFORM, KEY_CSPROJ
 
 app = typer.Typer(
     name="archsketch",
@@ -70,10 +80,6 @@ def run_detection(path: Path, silent: bool = False) -> tuple[list[TechnologyDete
     if file_summary:
         if not silent:
             console.print(f"[dim]Found: {', '.join(f'{k}({v})' for k, v in file_summary.items())}[/dim]")
-    else:
-        if not silent:
-            console.print("[yellow]No architecture-related files found.[/yellow]")
-        return [], Architecture()
     
     # Run detectors
     detections: list[TechnologyDetection] = []
@@ -127,7 +133,47 @@ def run_detection(path: Path, silent: bool = False) -> tuple[list[TechnologyDete
     # Terraform
     for tf_file in scan_result.get_files(KEY_TERRAFORM):
         detections.extend(detect_from_terraform(tf_file))
-    
+
+    # Rust
+    for cargo_file in scan_result.get_files("Cargo.toml"):
+        detections.extend(detect_from_cargo_toml(cargo_file))
+
+    # Go
+    for go_mod_file in scan_result.get_files("go.mod"):
+        detections.extend(detect_from_go_mod(go_mod_file))
+
+    # C# / .NET
+    for csproj_file in scan_result.get_files(KEY_CSPROJ):
+        detections.extend(detect_from_csproj(csproj_file))
+
+    # Ruby
+    for gemfile in scan_result.get_files("Gemfile"):
+        detections.extend(detect_from_gemfile(gemfile))
+
+    # PHP
+    for composer_file in scan_result.get_files("composer.json"):
+        detections.extend(detect_from_composer_json(composer_file))
+
+    # Dart / Flutter
+    for pubspec_file in scan_result.get_files("pubspec.yaml"):
+        detections.extend(detect_from_pubspec_yaml(pubspec_file))
+
+    # Elixir
+    for mix_file in scan_result.get_files("mix.exs"):
+        detections.extend(detect_from_mix_exs(mix_file))
+
+    # Swift
+    for swift_pkg in scan_result.get_files("Package.swift"):
+        detections.extend(detect_from_package_swift(swift_pkg))
+
+    # C / C++
+    for cmake_file in scan_result.get_files("CMakeLists.txt") + scan_result.get_files("Makefile"):
+        detections.extend(detect_from_cmake(cmake_file))
+
+    # Fallback: if nothing detected yet, scan source file extensions
+    if not detections:
+        detections.extend(detect_from_extensions(path))
+
     # Run inference
     engine = InferenceEngine()
     architecture = engine.infer(detections)
