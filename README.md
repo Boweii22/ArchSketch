@@ -7,8 +7,27 @@ A Python CLI tool that scans any project directory — or any public GitHub repo
 ## Install
 
 ```bash
+pipx install archsketch
+```
+
+`pipx` is recommended — it installs CLI tools in isolated environments and automatically puts them on your PATH, so `archsketch` works immediately on Windows, Mac, and Linux.
+
+Don't have pipx?
+
+```bash
+pip install pipx
+pipx ensurepath
+```
+
+Then restart your terminal and run `pipx install archsketch`.
+
+**Alternative (pip):**
+
+```bash
 pip install archsketch
 ```
+
+> On Windows, if `archsketch` isn't recognised after `pip install`, your Python Scripts folder may not be on your PATH. Use `pipx` instead, or run `python -m archsketch` as a workaround.
 
 ## Quick Start
 
@@ -278,7 +297,7 @@ archsketch/
 
 **`archsketch` command not found after `pip install archsketch`**
 
-On Windows, if Python's Scripts folder isn't on your PATH, use:
+Use `pipx install archsketch` instead — it handles PATH automatically. Or as a quick workaround:
 
 ```bash
 python -m archsketch analyze .
